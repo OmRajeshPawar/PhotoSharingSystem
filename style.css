@@ -1,0 +1,202 @@
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+/* Basic reset and body styling */
+body {
+    /* Using a soft, elegant background */
+    background-color: #fdfaf6; /* Creamy Ivory */
+    /* Adding a subtle texture or gradient background can enhance the royal feel */
+    /* background-image: linear-gradient(to bottom right, #fdfaf6, #f8f0e3); */
+    font-family: 'Cormorant Garamond', serif; /* Elegant serif for body */
+    color: #4a2c2a; /* Deep brown text color */
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    margin: 0;
+    padding: 30px; /* Increased padding */
+    box-sizing: border-box;
+}
+
+/* Main content container with golden frame effect */
+.container {
+    background-color: #ffffff; /* White card background */
+    padding: 35px 40px; /* Increased padding inside */
+    border-radius: 8px; /* Slightly less rounded for a more formal look */
+    /* Golden Frame Effect using border and box-shadow */
+    border: 3px solid #DAA520; /* Solid Gold Border */
+    box-shadow: 0 0 0 6px #ffffff, /* Inner white space */
+                0 0 0 8px #B8860B, /* Darker Gold Outer line */
+                0 8px 25px rgba(0, 0, 0, 0.15); /* Softer, deeper shadow */
+    text-align: center;
+    max-width: 500px; /* Slightly wider */
+    width: 100%;
+    margin-top: 30px;
+}
+
+/* Headings - Elegant and Prominent */
+h1, h2 {
+    font-family: 'Playfair Display', serif; /* Elegant display font */
+    font-weight: 700; /* Bold */
+    color: #8B4513; /* Saddle Brown - Richer than default */
+    margin-bottom: 20px;
+    letter-spacing: 0.5px; /* Slight spacing */
+}
+
+h1 {
+    font-size: 2.2em; /* Larger */
+    color: #B8860B; /* Dark Goldenrod */
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.1); /* Subtle text shadow */
+}
+
+h2 {
+    font-size: 1.7em;
+    font-style: italic; /* Add italic style for elegance */
+}
+
+/* Hide all sections initially */
+.section {
+    display: none;
+}
+
+/* Styling for the name prompt section */
+.prompt label {
+    display: block;
+    margin-bottom: 12px;
+    color: #4a2c2a; /* Deep brown */
+    font-weight: 700; /* Bold */
+    font-size: 1.2em;
+    font-family: 'Playfair Display', serif; /* Match heading font */
+}
+
+.prompt input[type="text"] {
+    width: calc(100% - 28px); /* Adjust width accounting for padding */
+    padding: 14px;
+    margin-bottom: 25px;
+    border: 1px solid #d4af37; /* Subtle gold border */
+    border-radius: 4px;
+    font-size: 1.1em;
+    font-family: 'Cormorant Garamond', serif; /* Match body font */
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.08);
+    background-color: #fffdfa; /* Slightly off-white */
+}
+
+/* General button styling - Royal Buttons */
+button {
+    background-color: #B8860B; /* Dark Goldenrod */
+    color: #ffffff; /* White text */
+    border: 1px solid #a0740a; /* Slightly darker border */
+    padding: 14px 30px;
+    border-radius: 5px;
+    font-size: 1.05em;
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 700; /* Bold */
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin: 8px 5px;
+    box-shadow: 0 3px 5px rgba(0,0,0,0.1);
+    text-transform: uppercase; /* Uppercase text for formality */
+    letter-spacing: 0.5px;
+}
+
+button:hover {
+    background-color: #DAA520; /* Lighter Gold on hover */
+    border-color: #b8860b;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    transform: translateY(-2px);
+}
+
+button:active {
+     transform: translateY(0px);
+     box-shadow: inset 0 2px 4px rgba(0,0,0,0.15);
+}
+
+button:disabled {
+    background-color: #cccccc; /* Grey out disabled */
+    border-color: #bbbbbb;
+    color: #666666;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+/* Specific style for the discard button - Royal Red */
+button.discard {
+    background-color: #800020; /* Burgundy */
+    border-color: #600018;
+}
+button.discard:hover {
+    background-color: #a04050; /* Lighter burgundy on hover */
+    border-color: #800020;
+}
+
+/* Paragraph styling within sections */
+#camera-section p, #no-photos-section p {
+    margin-bottom: 18px;
+    color: #4a2c2a; /* Deep Brown */
+    font-size: 1.15em;
+    line-height: 1.6;
+}
+
+/* Highlighted spans within paragraphs */
+#camera-section span, #no-photos-section span {
+     font-weight: 700; /* Bold */
+     color: #B8860B; /* Dark Goldenrod */
+ }
+
+/* Status message styling */
+.status-message {
+    margin-top: 18px;
+    font-style: italic;
+    color: #7f8c8d;
+    min-height: 1.2em;
+    font-size: 1em;
+}
+
+/* Small print text styling */
+.small-print {
+    font-size: 0.9em;
+    color: #8B4513; /* Saddle Brown */
+    margin-top: 30px;
+    line-height: 1.5;
+}
+
+/* Review Section Specific Styles */
+#review-section img#photo-preview {
+    display: block;
+    max-width: 100%;
+    max-height: 40vh; /* Adjust as needed */
+    margin: 25px auto;
+    /* Golden frame for preview */
+    border: 2px solid #DAA520; /* Gold */
+    padding: 4px; /* Space between image and inner border */
+    background-color: #ffffff; /* White background behind padding */
+    box-shadow: 0 0 0 1px #B8860B; /* Outer darker gold line */
+    border-radius: 4px;
+    object-fit: contain;
+}
+
+#review-section .button-group {
+    margin-top: 25px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#review-section .button-group button {
+    width: 95%;
+    max-width: 320px;
+    margin-bottom: 15px;
+    padding: 15px 20px;
+}
+
+/* Add subtle sparkle/shine effect if desired (optional) */
+/* You could use pseudo-elements or background gradients */
+.container::before {
+    /* Example: Subtle gradient overlay */
+    /* content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(45deg, rgba(255,215,0,0.05), rgba(255,255,255,0.02), rgba(218,165,32,0.05));
+    border-radius: inherit;
+    pointer-events: none; */
+}

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wedding Camera</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to Our Wedding!</h1>
+
+        <div id="name-prompt" class="prompt section">
+            <label for="guest-name">Please enter your name:</label>
+            <input type="text" id="guest-name" placeholder="Your Name" aria-label="Guest Name Input">
+            <button id="submit-name">Continue</button>
+        </div>
+
+        <div id="camera-section" class="section" style="display: none;">
+            <p>Hi <span id="display-name">Guest</span>!</p>
+            <p>Photos remaining: <span id="photos-remaining">10</span></p>
+            <button id="take-photo-button">Take Photo</button>
+            <input type="file" id="photo-input" accept="image/*" capture="environment" style="display: none;" aria-label="Hidden Photo Input">
+             <p id="camera-status-message" class="status-message" aria-live="polite"></p>
+             <p class="small-print">Close this window anytime. Scan the QR code again to reopen the camera if you have photos left.</p>
+        </div>
+
+        <div id="review-section" class="section" style="display: none;">
+            <h2>Review Photo</h2>
+            <img id="photo-preview" src="#" alt="Photo Preview">
+            <p id="review-status-message" class="status-message" aria-live="polite"></p>
+            <div class="button-group">
+                <button id="upload-button">Upload (Uses 1 Photo Credit)</button>
+                <button id="save-button">Save to My Device</button>
+                <button id="discard-button" class="discard">Discard & Retake</button>
+            </div>
+        </div>
+
+        <div id="no-photos-section" class="section" style="display: none;">
+             <p>Thanks, <span id="final-display-name">Guest</span>!</p>
+             <p>You've used all your photos!</p>
+             <p class="small-print">We hope you enjoyed capturing moments!</p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

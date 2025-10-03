@@ -1,0 +1,223 @@
+# Lambda Function (lambda_function.py) - UPDATED
+
+import json
+import base64
+import boto3
+import uuid
+import datetime
+import os
+import re
+import traceback
+from botocore.exceptions import ClientError # Import ClientError for DynamoDB exceptions
+
+# --- Configuration ---
+S3_BUCKET_NAME = os.environ.get('S3_BUCKET_NAME')
+# NEW: Get DynamoDB table name from environment variables
+DYNAMODB_TABLE_NAME = os.environ.get('DYNAMODB_TABLE_NAME')
+# NEW: Max photos per device per event
+MAX_PHOTOS_PER_DEVICE = 10
+
+s3 = boto3.client('s3')
+# NEW: Instantiate DynamoDB client
+dynamodb = boto3.client('dynamodb')
+
+DEFAULT_EVENT_NAME = 'UnknownEvent'
+DEFAULT_GUEST_NAME = 'UnknownGuest'
+DEFAULT_DEVICE_ID = 'UnknownDevice' # Fallback if missing, though JS should always send it
+
+# --- Helper Function for Sanitization (Keep As Is) ---
+def sanitize_for_s3(name, default_name):
+    name = name.strip()
+    name = re.sub(r'[^a-zA-Z0-9_.-]+', '_', name)
+    if name.startswith('.') or name.startswith('-'):
+        name = '_' + name
+    return name if name else default_name
+
+# --- Main Handler Function ---
+def lambda_handler(event, context):
+    """
+    Handles image uploads triggered by API Gateway.
+    Expects JSON body: 'guestName', 'eventName', 'deviceID' (NEW), 'imageData' (Base64).
+    1. Checks DynamoDB count for (EventName, DeviceID).
+    2. If count < MAX_PHOTOS_PER_DEVICE, increments count and uploads to S3.
+    3. Otherwise, returns an error.
+    """
+    try:
+        # --- 1. Parse Input Data ---
+        print(f"Received event: {json.dumps(event)}") # Log raw event
+
+        raw_body = event.get('body')
+        if isinstance(raw_body, str):
+            body = json.loads(raw_body)
+        elif isinstance(raw_body, dict):
+            body = raw_body # May already be parsed
+        else:
+            raise ValueError("Request body is missing or not in expected format")
+
+        guest_name_raw = body.get('guestName')
+        event_name_raw = body.get('eventName')
+        # NEW: Get Device ID from payload
+        device_id_raw = body.get('deviceID')
+        image_data_base64 = body.get('imageData')
+
+        # --- 2. Validate Input (Including new fields) ---
+        if not guest_name_raw:
+            print("Warning: Missing 'guestName'. Using default.")
+            guest_name_raw = DEFAULT_GUEST_NAME
+        if not event_name_raw:
+            print("Warning: Missing 'eventName'. Using default.")
+            event_name_raw = DEFAULT_EVENT_NAME
+        # NEW: Validate Device ID
+        if not device_id_raw:
+            print("Error: Missing 'deviceID'. Cannot enforce limits.")
+            # Using a default might allow bypassing if JS fails, so error out.
+            raise ValueError("Missing deviceID in request body")
+        if not image_data_base64:
+            print("Error: Missing 'imageData'.")
+            raise ValueError("Missing imageData in request body")
+        if not S3_BUCKET_NAME:
+            print("Error: S3_BUCKET_NAME environment variable is not set.")
+            raise ValueError("Server configuration error: S3_BUCKET_NAME not set")
+        # NEW: Validate DynamoDB Table Name
+        if not DYNAMODB_TABLE_NAME:
+            print("Error: DYNAMODB_TABLE_NAME environment variable is not set.")
+            raise ValueError("Server configuration error: DYNAMODB_TABLE_NAME not set")
+
+        # --- 3. Sanitize Names & Prepare IDs ---
+        safe_guest_name = sanitize_for_s3(guest_name_raw, DEFAULT_GUEST_NAME)
+        safe_event_name = sanitize_for_s3(event_name_raw, DEFAULT_EVENT_NAME)
+        # Device ID should ideally be a UUID from the client, just use it directly
+        # Basic check: Ensure it's not empty after potential stripping (though UUIDs shouldn't be)
+        device_id = device_id_raw.strip()
+        if not device_id:
+             print("Error: Invalid 'deviceID' (empty after stripping).")
+             raise ValueError("Invalid deviceID in request body")
+
+        print(f"Sanitized names - Event: '{safe_event_name}', Guest: '{safe_guest_name}', DeviceID: '{device_id}'")
+
+        # --- 4. Check and Update DynamoDB Count (CRITICAL NEW STEP) ---
+        print(f"Checking/Updating count in DynamoDB table: {DYNAMODB_TABLE_NAME}")
+        try:
+            response = dynamodb.update_item(
+                TableName=DYNAMODB_TABLE_NAME,
+                Key={
+                    'EventName': {'S': safe_event_name},
+                    'DeviceID': {'S': device_id}
+                },
+                # Increment UploadCount by 1. Also set GuestName (useful for debugging)
+                UpdateExpression="ADD UploadCount :inc SET GuestName = :gn",
+                # Condition: Succeed ONLY if DeviceID doesn't exist OR UploadCount < max
+                ConditionExpression="attribute_not_exists(DeviceID) OR UploadCount < :max",
+                ExpressionAttributeValues={
+                    ':inc': {'N': '1'}, # Increment value
+                    ':max': {'N': str(MAX_PHOTOS_PER_DEVICE)}, # Max allowed uploads
+                    ':gn': {'S': safe_guest_name} # Guest name associated with last upload
+                },
+                ReturnValues="UPDATED_NEW" # Get the new value of UploadCount back
+            )
+            new_count = response.get('Attributes', {}).get('UploadCount', {}).get('N')
+            print(f"DynamoDB update successful. New count for {safe_event_name}/{device_id}: {new_count}")
+
+        except ClientError as e:
+            # Check if the error is because the condition failed (limit reached)
+            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                print(f"Limit reached for DeviceID {device_id} in Event {safe_event_name}.")
+                return {
+                    'statusCode': 429, # Too Many Requests (or 403 Forbidden)
+                    'headers': {
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Headers': 'Content-Type',
+                        'Access-Control-Allow-Methods': 'OPTIONS,POST'
+                    },
+                    'body': json.dumps({
+                        'message': f'Upload limit of {MAX_PHOTOS_PER_DEVICE} photos reached for this device for this event.'
+                    })
+                }
+            else:
+                # Raise other DynamoDB client errors
+                print(f"DynamoDB error: {e}")
+                raise # Re-raise the exception to be caught by the general handler
+
+        # --- 5. Decode Image Data (If DynamoDB check passed) ---
+        # (Keep existing decoding logic)
+        try:
+            if ',' in image_data_base64:
+                header, encoded_data = image_data_base64.split(',', 1)
+                mime_type = header.split(';')[0].split(':')[1] if ':' in header and ';' in header else 'image/jpeg'
+                file_extension = mime_type.split('/')[-1].lower() if '/' in mime_type else 'jpg'
+                allowed_extensions = ['jpeg', 'jpg', 'png', 'gif', 'webp']
+                if file_extension not in allowed_extensions:
+                    if file_extension == 'pjpeg': file_extension = 'jpg'
+                    elif file_extension == 'svg+xml': file_extension = 'svg'
+                    else: file_extension = 'jpg' # Fallback
+            else:
+                encoded_data = image_data_base64
+                mime_type = 'image/jpeg'
+                file_extension = 'jpg'
+
+            image_bytes = base64.b64decode(encoded_data)
+            print(f"Decoded image data. Mime-type: {mime_type}, Extension: {file_extension}")
+
+        except (ValueError, TypeError, base64.binascii.Error) as decode_error:
+            print(f"Error decoding Base64 image data: {decode_error}")
+            # NOTE: Consider if we should *decrement* the DynamoDB count here if decoding fails *after* incrementing.
+            # For simplicity now, we won't, but in a production system, you might add compensating logic.
+            raise ValueError(f"Invalid image data format: {decode_error}")
+
+        # --- 6. Prepare for S3 Upload ---
+        # (Keep existing S3 key generation logic)
+        timestamp = datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')
+        unique_id = str(uuid.uuid4())[:8] # Using client UUID is better now
+        file_name = f"{timestamp}_{unique_id}.{file_extension}"
+        s3_key = f"{safe_event_name}/{safe_guest_name}/{file_name}" # Keep guest name in path for organizer convenience
+        print(f"Prepared S3 key: {s3_key}")
+
+        # --- 7. Upload to S3 ---
+        print(f"Uploading to bucket: {S3_BUCKET_NAME}, Key: {s3_key}")
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=s3_key,
+            Body=image_bytes,
+            ContentType=mime_type
+            # Optionally add more metadata
+            # Metadata={
+            #     'original-guest-name': guest_name_raw,
+            #     'original-event-name': event_name_raw,
+            #     'device-id': device_id, # Store device ID used for upload
+            #     'upload-time-utc': datetime.datetime.utcnow().isoformat()
+            # }
+        )
+        print("Successfully uploaded to S3.")
+
+        # --- 8. Return Success Response ---
+        # (Keep existing success response structure)
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'OPTIONS,POST'
+            },
+            'body': json.dumps({
+                'message': 'Image uploaded successfully!',
+                's3Key': s3_key,
+                'uploadCount': int(new_count) if new_count else 1 # Return the new count
+            })
+        }
+
+    # --- Error Handling ---
+    # (Keep existing generic error handling, ensuring CORS headers)
+    except Exception as e:
+        print(f"Error processing request: {e}")
+        traceback.print_exc()
+        return {
+            'statusCode': 500,
+             'headers': {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'OPTIONS,POST'
+            },
+            'body': json.dumps({
+                'message': f'An error occurred during upload: {str(e)}'
+            })
+        }

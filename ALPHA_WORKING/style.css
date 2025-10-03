@@ -1,0 +1,159 @@
+/* Basic reset and body styling */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+    background-color: #f4f4f4; /* Light grey background */
+    display: flex;
+    justify-content: center;
+    align-items: flex-start; /* Align top for potentially long content */
+    min-height: 100vh;
+    margin: 0;
+    padding: 20px; /* Add padding around the container */
+    box-sizing: border-box; /* Include padding in element's total width/height */
+    color: #333; /* Default text color */
+}
+
+/* Main content container */
+.container {
+    background-color: #ffffff; /* White background for the card */
+    padding: 25px 30px;
+    border-radius: 12px; /* Softer rounded corners */
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+    text-align: center;
+    max-width: 450px; /* Max width for readability */
+    width: 100%; /* Use full width up to max-width */
+    margin-top: 20px; /* Space from top */
+}
+
+/* Headings */
+h1 {
+    color: #2c3e50; /* Dark blue-grey */
+    margin-bottom: 15px;
+    font-size: 1.8em;
+}
+h2 {
+    color: #34495e; /* Slightly lighter blue-grey */
+    margin-bottom: 20px;
+    font-size: 1.5em;
+}
+
+/* Hide all sections initially; JavaScript will show the correct one */
+.section {
+    display: none;
+}
+
+/* Styling for the name prompt section */
+.prompt label {
+    display: block;
+    margin-bottom: 10px;
+    color: #555;
+    font-weight: bold;
+    font-size: 1.1em;
+}
+
+.prompt input[type="text"] {
+    width: calc(100% - 24px); /* Adjust width accounting for padding */
+    padding: 12px;
+    margin-bottom: 20px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 1em;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.06); /* Inner shadow */
+}
+
+/* General button styling */
+button {
+    background-color: #3498db; /* Nice blue */
+    color: white;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 6px;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.1s ease; /* Smooth transitions */
+    margin: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Subtle button shadow */
+}
+
+button:hover {
+    background-color: #2980b9; /* Darker blue on hover */
+    transform: translateY(-1px); /* Slight lift on hover */
+}
+
+button:active {
+     transform: translateY(0px); /* Press down effect */
+     box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+}
+
+
+button:disabled {
+    background-color: #bdc3c7; /* Grey out disabled buttons */
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+/* Specific style for the discard button */
+button.discard {
+    background-color: #e74c3c; /* Red for discard/danger */
+}
+button.discard:hover {
+    background-color: #c0392b; /* Darker red on hover */
+}
+
+/* Paragraph styling within sections */
+#camera-section p, #no-photos-section p {
+    margin-bottom: 15px;
+    color: #333;
+    font-size: 1.1em;
+    line-height: 1.5;
+}
+
+/* Highlighted spans within paragraphs */
+#camera-section span, #no-photos-section span {
+     font-weight: bold;
+     color: #3498db; /* Use theme color */
+ }
+
+/* Status message styling */
+.status-message {
+    margin-top: 15px;
+    font-style: italic;
+    color: #7f8c8d; /* Muted grey */
+    min-height: 1.2em; /* Prevent layout jumps when message appears/disappears */
+    font-size: 0.95em;
+}
+
+/* Small print text styling */
+.small-print {
+    font-size: 0.85em;
+    color: #95a5a6; /* Lighter grey */
+    margin-top: 25px;
+    line-height: 1.4;
+}
+
+/* Review Section Specific Styles */
+#review-section img#photo-preview {
+    display: block; /* Center image properly */
+    max-width: 100%; /* Ensure image fits container */
+    max-height: 45vh; /* Limit preview height on viewport */
+    margin: 20px auto; /* Center horizontally, add vertical space */
+    border: 2px solid #ecf0f1; /* Light border */
+    border-radius: 8px; /* Match container rounding */
+    background-color: #f8f9f9; /* Very light background for placeholder */
+    object-fit: contain; /* Ensure aspect ratio is maintained */
+}
+
+#review-section .button-group {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column; /* Stack buttons */
+    align-items: center; /* Center buttons horizontally */
+}
+
+#review-section .button-group button {
+    width: 90%; /* Make buttons wide for easy tapping */
+    max-width: 300px; /* But not excessively wide on large screens */
+    margin-bottom: 12px; /* Space between stacked buttons */
+    padding: 14px 20px; /* Slightly larger buttons */
+}

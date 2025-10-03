@@ -1,0 +1,148 @@
+import json         # To handle JSON data from API Gateway
+import base64       # To decode the Base64 image data from the frontend
+import boto3        # AWS SDK for Python, to interact with S3
+import uuid         # To generate unique identifiers for filenames
+import datetime     # To add timestamps to filenames
+import os           # To access environment variables (like the bucket name)
+
+# --- Configuration ---
+# Get the S3 bucket name from an environment variable (set in Lambda console)
+# This is better practice than hardcoding the bucket name in the code.
+S3_BUCKET_NAME = os.environ.get('S3_BUCKET_NAME')
+
+# Initialize the S3 client (connection to the S3 service)
+# It will use the permissions from the Lambda function's execution role.
+s3 = boto3.client('s3')
+
+# --- Main Handler Function ---
+# This function is executed every time the Lambda is triggered (by API Gateway)
+def lambda_handler(event, context):
+    """
+    Handles image uploads triggered by API Gateway.
+    Expects a JSON body with 'guestName' and 'imageData' (Base64 encoded).
+    Uploads the decoded image to the specified S3 bucket under a folder
+    named after the guest.
+    """
+    try:
+        # --- 1. Parse Input Data ---
+        print(f"Received event: {json.dumps(event)}") # Log the raw event for debugging
+
+        # API Gateway (with Lambda Proxy integration) sends the request body as a JSON string
+        # Check if 'body' exists and is a string before parsing
+        raw_body = event.get('body')
+        if isinstance(raw_body, str):
+            body = json.loads(raw_body)
+        elif isinstance(raw_body, dict):
+             body = raw_body # Sometimes it might already be parsed
+        else:
+            raise ValueError("Request body is missing or not in expected format (string or dict)")
+
+        guest_name = body.get('guestName')
+        image_data_base64 = body.get('imageData') # Expecting Base64 encoded image string
+
+        # --- 2. Validate Input ---
+        if not guest_name:
+            print("Warning: Missing 'guestName' in request body. Using 'UnknownGuest'.")
+            guest_name = 'UnknownGuest' # Provide a default name
+
+        if not image_data_base64:
+            print("Error: Missing 'imageData' in request body.")
+            raise ValueError("Missing imageData in request body")
+
+        if not S3_BUCKET_NAME:
+            print("Error: S3_BUCKET_NAME environment variable is not set.")
+            # This is a configuration error, raise it to stop execution
+            raise ValueError("S3_BUCKET_NAME environment variable not set")
+
+        # --- 3. Prepare Data for S3 ---
+        # Clean the guest name to make it safe for use as an S3 "folder" name
+        # Allow letters, numbers, hyphens, underscores. Replace others with underscore.
+        safe_guest_name = "".join(c if c.isalnum() or c in ['-', '_'] else '_' for c in guest_name)
+        if not safe_guest_name: # Handle cases where the name becomes empty after cleaning
+            safe_guest_name = 'UnknownGuest'
+
+        # Decode the Base64 image data.
+        # The frontend sends a Data URL like "data:image/jpeg;base64,/9j/4AAQSk..."
+        # We need to strip the prefix "data:[mime-type];base64," before decoding.
+        try:
+            if ',' in image_data_base64:
+                header, encoded_data = image_data_base64.split(',', 1)
+                # Determine image format from header for ContentType (best effort)
+                mime_type = header.split(';')[0].split(':')[1] if ':' in header and ';' in header else 'image/jpeg' # default to jpeg
+                file_extension = mime_type.split('/')[-1] if '/' in mime_type else 'jpg'
+                # Sanitize file extension
+                if file_extension not in ['jpeg', 'jpg', 'png', 'gif', 'webp']:
+                    file_extension = 'jpg' # Default to jpg if type is unusual
+            else:
+                # Assume raw base64 data if no header prefix is found
+                encoded_data = image_data_base64
+                mime_type = 'image/jpeg' # Default ContentType
+                file_extension = 'jpg' # Default extension
+
+            image_bytes = base64.b64decode(encoded_data)
+            print(f"Decoded image data. Detected mime-type: {mime_type}, using extension: {file_extension}")
+
+        except (ValueError, TypeError, base64.binascii.Error) as decode_error:
+            print(f"Error decoding Base64 image data: {decode_error}")
+            raise ValueError(f"Invalid image data format: {decode_error}")
+
+
+        # Generate a unique filename to prevent overwrites
+        timestamp = datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f') # UTC timestamp
+        unique_id = str(uuid.uuid4())[:8] # Short unique ID
+        file_name = f"{timestamp}_{unique_id}.{file_extension}"
+
+        # Create the full S3 key (path within the bucket)
+        # This creates a virtual folder structure: BucketName/GuestName/filename.ext
+        s3_key = f"{safe_guest_name}/{file_name}"
+        print(f"Prepared S3 key: {s3_key}")
+
+        # --- 4. Upload to S3 ---
+        print(f"Uploading to bucket: {S3_BUCKET_NAME}, Key: {s3_key}")
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=s3_key,
+            Body=image_bytes,         # The actual binary image data
+            ContentType=mime_type     # Helps browsers display the image correctly if accessed directly
+            # You could add metadata here too:
+            # Metadata={'guest-name': guest_name, 'upload-time-utc': datetime.datetime.utcnow().isoformat()}
+        )
+        print("Successfully uploaded to S3.")
+
+        # --- 5. Return Success Response ---
+        # API Gateway expects a specific JSON format for the response
+        return {
+            'statusCode': 200,
+            'headers': {
+                # IMPORTANT: CORS Headers - Allow requests from any origin ('*')
+                # In production, replace '*' with your specific S3 website URL for security.
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'OPTIONS,POST' # Allow POST and preflight OPTIONS requests
+            },
+            'body': json.dumps({
+                'message': 'Image uploaded successfully!',
+                's3Key': s3_key # Optionally return the path where it was saved
+             })
+        }
+
+    # --- Error Handling ---
+    except Exception as e:
+        # Log the detailed error to CloudWatch Logs for debugging
+        print(f"Error processing request: {e}")
+        import traceback
+        traceback.print_exc() # Print the full stack trace
+
+        # Return an error response to API Gateway
+        return {
+            'statusCode': 500, # Internal Server Error
+             'headers': {
+                # Include CORS headers even in error responses
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'OPTIONS,POST'
+            },
+            'body': json.dumps({
+                'message': f'Error uploading image: {str(e)}'
+            })
+        }

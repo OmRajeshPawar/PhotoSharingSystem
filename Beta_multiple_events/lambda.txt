@@ -1,0 +1,154 @@
+import json
+import base64
+import boto3
+import uuid
+import datetime
+import os
+import re # NEW: Import regular expressions for more robust sanitization
+
+# --- Configuration ---
+S3_BUCKET_NAME = os.environ.get('S3_BUCKET_NAME')
+s3 = boto3.client('s3')
+DEFAULT_EVENT_NAME = 'UnknownEvent' # NEW: Default if event name is missing/invalid
+DEFAULT_GUEST_NAME = 'UnknownGuest' # Existing default
+
+# --- Main Handler Function ---
+def lambda_handler(event, context):
+    """
+    Handles image uploads triggered by API Gateway.
+    Expects a JSON body with 'guestName', 'eventName' (NEW), and 'imageData' (Base64).
+    Uploads the decoded image to S3 under: BucketName/EventName/GuestName/filename.ext
+    """
+    try:
+        # --- 1. Parse Input Data ---
+        print(f"Received event: {json.dumps(event)}") # Log raw event
+
+        raw_body = event.get('body')
+        if isinstance(raw_body, str):
+            body = json.loads(raw_body)
+        elif isinstance(raw_body, dict):
+            body = raw_body # May already be parsed
+        else:
+            raise ValueError("Request body is missing or not in expected format")
+
+        guest_name_raw = body.get('guestName')
+        event_name_raw = body.get('eventName') # NEW: Get event name
+        image_data_base64 = body.get('imageData')
+
+        # --- 2. Validate Input ---
+        if not guest_name_raw:
+            print("Warning: Missing 'guestName'. Using default.")
+            guest_name_raw = DEFAULT_GUEST_NAME
+        if not event_name_raw: # NEW: Validate event name
+            print("Warning: Missing 'eventName'. Using default.")
+            event_name_raw = DEFAULT_EVENT_NAME
+        if not image_data_base64:
+            print("Error: Missing 'imageData'.")
+            raise ValueError("Missing imageData in request body")
+        if not S3_BUCKET_NAME:
+            print("Error: S3_BUCKET_NAME environment variable is not set.")
+            raise ValueError("Server configuration error: S3_BUCKET_NAME not set")
+
+        # --- 3. Prepare Data for S3 ---
+
+        # MODIFIED: Enhanced sanitization for S3 keys (allow letters, numbers, hyphen, underscore, period)
+        def sanitize_for_s3(name, default_name):
+            # Remove leading/trailing whitespace
+            name = name.strip()
+            # Replace sequences of invalid characters with a single underscore
+            name = re.sub(r'[^a-zA-Z0-9_.-]+', '_', name)
+            # Prevent names starting with '.' or '-' after sanitization
+            if name.startswith('.') or name.startswith('-'):
+                name = '_' + name
+            # Handle empty name after sanitization
+            return name if name else default_name
+
+        safe_guest_name = sanitize_for_s3(guest_name_raw, DEFAULT_GUEST_NAME)
+        safe_event_name = sanitize_for_s3(event_name_raw, DEFAULT_EVENT_NAME) # NEW: Sanitize event name
+
+        print(f"Sanitized names - Event: '{safe_event_name}', Guest: '{safe_guest_name}'")
+
+        # Decode Base64 image data (keep existing logic)
+        try:
+            if ',' in image_data_base64:
+                header, encoded_data = image_data_base64.split(',', 1)
+                mime_type = header.split(';')[0].split(':')[1] if ':' in header and ';' in header else 'image/jpeg'
+                file_extension = mime_type.split('/')[-1].lower() if '/' in mime_type else 'jpg'
+                # Basic extension check
+                allowed_extensions = ['jpeg', 'jpg', 'png', 'gif', 'webp']
+                if file_extension not in allowed_extensions:
+                     # Check for common alternatives (e.g., image/pjpeg -> jpg)
+                     if file_extension == 'pjpeg': file_extension = 'jpg'
+                     elif file_extension == 'svg+xml': file_extension = 'svg' # Or handle as needed
+                     else: file_extension = 'jpg' # Fallback
+            else:
+                encoded_data = image_data_base64
+                mime_type = 'image/jpeg' # Assume if no header
+                file_extension = 'jpg'
+
+            image_bytes = base64.b64decode(encoded_data)
+            print(f"Decoded image data. Mime-type: {mime_type}, Extension: {file_extension}")
+
+        except (ValueError, TypeError, base64.binascii.Error) as decode_error:
+            print(f"Error decoding Base64 image data: {decode_error}")
+            raise ValueError(f"Invalid image data format: {decode_error}")
+
+        # Generate unique filename (keep existing logic)
+        timestamp = datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')
+        unique_id = str(uuid.uuid4())[:8]
+        file_name = f"{timestamp}_{unique_id}.{file_extension}"
+
+        # MODIFIED: Create the S3 key using the event name as a prefix/folder
+        s3_key = f"{safe_event_name}/{safe_guest_name}/{file_name}"
+        print(f"Prepared S3 key: {s3_key}")
+
+        # --- 4. Upload to S3 ---
+        print(f"Uploading to bucket: {S3_BUCKET_NAME}, Key: {s3_key}")
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=s3_key,
+            Body=image_bytes,
+            ContentType=mime_type
+            # Optionally add metadata including original names if needed
+            # Metadata={
+            #     'original-guest-name': guest_name_raw,
+            #     'original-event-name': event_name_raw,
+            #     'upload-time-utc': datetime.datetime.utcnow().isoformat()
+            # }
+        )
+        print("Successfully uploaded to S3.")
+
+        # --- 5. Return Success Response ---
+        # (Keep existing success response structure, including CORS headers)
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Access-Control-Allow-Origin': '*', # Adjust if needed for security
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'OPTIONS,POST'
+            },
+            'body': json.dumps({
+                'message': 'Image uploaded successfully!',
+                's3Key': s3_key
+            })
+        }
+
+    # --- Error Handling ---
+    # (Keep existing error handling structure, including CORS headers in error response)
+    except Exception as e:
+        print(f"Error processing request: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            'statusCode': 500,
+             'headers': {
+                'Access-Control-Allow-Origin': '*', # Adjust if needed
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'OPTIONS,POST'
+            },
+            'body': json.dumps({
+                # Provide a slightly more generic message to the user maybe
+                'message': f'An error occurred during upload: {str(e)}'
+                #'detailedError': str(e) # Maybe only include detailed error in logs
+            })
+        }
